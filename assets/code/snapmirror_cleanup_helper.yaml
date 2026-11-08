@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Cleanup helper for FSxN SnapMirror stacks stuck in DELETE_FAILED. Deploys a
+  small EC2 instance with Session Manager into an existing VPC (even without
+  NAT Gateway — uses SSM VPC endpoints) so you can run ONTAP CLI commands
+  (snapmirror release, etc.) to unblock CloudFormation stack deletion.
+  Delete this stack once cleanup is complete.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC of the FSxN stack that is stuck in DELETE_FAILED
+
+  PrivateSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private subnet in the same VPC
+
+  FSxNSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: The FSxN security group — grants the helper instance access to the file system management endpoint
+
+  LinuxAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: Amazon Linux 2023 AMI ID (do not change)
+
+Resources:
+  # ============================================================
+  # SSM VPC endpoints (required because the original stack's NAT Gateway
+  # may have been deleted before this helper is deployed)
+  # ============================================================
+  SSMEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTPS to SSM VPC endpoints
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref FSxNSecurityGroupId
+          Description: HTTPS from the cleanup instance (which uses the FSxN security group)
+
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnetId
+      SecurityGroupIds:
+        - !Ref SSMEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  SSMMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnetId
+      SecurityGroupIds:
+        - !Ref SSMEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  EC2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnetId
+      SecurityGroupIds:
+        - !Ref SSMEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  # ============================================================
+  # IAM Role and EC2 instance
+  # ============================================================
+  CleanupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonFSxReadOnlyAccess
+
+  CleanupInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref CleanupRole
+
+  CleanupInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - SSMEndpoint
+      - SSMMessagesEndpoint
+      - EC2MessagesEndpoint
+    Properties:
+      InstanceType: t3.micro
+      ImageId: !Ref LinuxAmiId
+      SubnetId: !Ref PrivateSubnetId
+      SecurityGroupIds:
+        - !Ref FSxNSecurityGroupId
+      IamInstanceProfile: !Ref CleanupInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-snapmirror-cleanup'
+
+Outputs:
+  InstanceId:
+    Description: Use this instance via Session Manager to run ONTAP CLI cleanup commands
+    Value: !Ref CleanupInstance
+
+  UsageInstructions:
+    Description: Quick usage guide
+    Value: >-
+      1. aws ssm start-session --target <instance-id>
+      2. ssh fsxadmin@<fsxn-management-ip> (verify the host key fingerprint, then enter the password when prompted)
+      3. Run 'snapmirror list-destinations' to find stuck relationships
+      4. Run 'snapmirror release -destination-path X:Y -relationship-info-only true' to clear

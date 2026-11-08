@@ -1,27 +1,11 @@
-### vsCode ###
-.vscode
-
-### macOS ###
-# General
+# OS metadata
 .DS_Store
-.AppleDouble
-.LSOverride
-# Files that might appear in the root of a volume
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
+Thumbs.db
+desktop.ini
 
-**/node_modules
-**/dist
-**/build
-**/.DS_Store
-**/.angular
-**/.idea
-cdk.out
-**/data/**.csv
-
+# Local credentials and environment files
 .env
+.env.*
+
+# Build and tool logs
+*.log

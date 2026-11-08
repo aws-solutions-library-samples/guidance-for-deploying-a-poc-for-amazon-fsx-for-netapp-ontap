@@ -1,0 +1,830 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  This CloudFormation template deploys a PoC environment for Amazon FSx for
+  NetApp ONTAP (Single-AZ with Active Directory) including a VPC, AWS Managed
+  Microsoft AD, EC2 instance with Session Manager, and an FSxN file system
+  with one SVM configured for NFS and SMB access.
+
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W1011  # PoC template uses parameters for secrets for simplicity
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: PoC Settings
+        Parameters:
+          - PocType
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - VpcCidr
+          - PublicSubnetCidr
+          - PrivateSubnetCidr
+          - PrivateSubnet2Cidr
+          - AvailabilityZone
+          - AvailabilityZone2
+      - Label:
+          default: Active Directory Configuration
+        Parameters:
+          - ADDomainName
+          - ADAdminPassword
+          - ADOrganizationalUnit
+      - Label:
+          default: FSx for NetApp ONTAP Configuration
+        Parameters:
+          - FsxAdminPassword
+          - SvmAdminPassword
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - LinuxAmiId
+          - WindowsAmiId
+    ParameterLabels:
+      PocType:
+        default: PoC Deployment Type
+      VpcCidr:
+        default: VPC CIDR Range
+      PublicSubnetCidr:
+        default: Public Subnet CIDR Range
+      PrivateSubnetCidr:
+        default: Private Subnet 1 CIDR Range
+      PrivateSubnet2Cidr:
+        default: Private Subnet 2 CIDR Range (required for AD)
+      AvailabilityZone:
+        default: Availability Zone 1
+      AvailabilityZone2:
+        default: Availability Zone 2 (required for AD)
+      ADDomainName:
+        default: Active Directory Domain Name
+      ADAdminPassword:
+        default: AD Admin Password
+      ADOrganizationalUnit:
+        default: AD Organizational Unit (OU)
+      FsxAdminPassword:
+        default: FSxN Admin Password
+      SvmAdminPassword:
+        default: SVM Admin Password
+      LinuxAmiId:
+        default: Amazon Linux 2023 AMI ID
+      WindowsAmiId:
+        default: Windows Server 2022 AMI ID
+
+Parameters:
+  PocType:
+    Type: String
+    Default: Functional
+    AllowedValues:
+      - Functional
+      - Performance
+    Description: >-
+      Functional: deploys a cost-effective environment for basic functional testing
+      (t3.medium EC2, 384 MBps throughput).
+      Performance: deploys a high-performance environment for benchmarking
+      (c6in.8xlarge EC2, 3072 MBps throughput).
+
+  VpcCidr:
+    Type: String
+    Default: '10.0.0.0/16'
+    Description: CIDR block for the VPC
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    ConstraintDescription: Must be a valid CIDR range (e.g. 10.0.0.0/16)
+
+  PublicSubnetCidr:
+    Type: String
+    Default: '10.0.1.0/24'
+    Description: CIDR block for the public subnet (NAT Gateway)
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    ConstraintDescription: Must be a valid CIDR range
+
+  PrivateSubnetCidr:
+    Type: String
+    Default: '10.0.2.0/24'
+    Description: CIDR block for private subnet 1
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    ConstraintDescription: Must be a valid CIDR range
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: '10.0.3.0/24'
+    Description: CIDR block for private subnet 2 (required for AWS Managed AD)
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    ConstraintDescription: Must be a valid CIDR range
+
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: Availability Zone 1 (FSxN and EC2)
+
+  AvailabilityZone2:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: Availability Zone 2 (required for AWS Managed AD)
+
+  ADDomainName:
+    Type: String
+    Default: corp.example.com
+    Description: Fully qualified domain name for AWS Managed Microsoft AD
+
+  ADAdminPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    Description: Password for the AD Admin user
+
+  ADOrganizationalUnit:
+    Type: String
+    Default: 'OU=Computers,OU=corp,DC=corp,DC=example,DC=com'
+    Description: >-
+      Distinguished name of the OU where the SVM computer account will be created.
+      For AWS Managed AD with domain corp.example.com, the default is
+      OU=Computers,OU=corp,DC=corp,DC=example,DC=com.
+      Adjust if using a different domain name.
+
+  FsxAdminPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 50
+    Description: Password for the fsxadmin user on the FSxN file system
+
+  SvmAdminPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 50
+    Description: Password for the vsadmin user on the SVM
+
+  LinuxAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: Amazon Linux 2023 AMI ID (do not change)
+
+  WindowsAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base
+    Description: Windows Server 2022 AMI ID (do not change)
+
+Conditions:
+  IsPerformance: !Equals [!Ref PocType, Performance]
+
+Resources:
+  # ============================================================
+  # VPC and Networking
+  # ============================================================
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-VPC'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-IGW'
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Ref AvailabilityZone
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Public-Subnet'
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCidr
+      AvailabilityZone: !Ref AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Private-Subnet-1'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Ref AvailabilityZone2
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Private-Subnet-2'
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT-EIP'
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: AttachGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Public-RT'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Private-RT-1'
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetRTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Private-RT-2'
+
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  # S3 Gateway endpoint — required so that requests to the S3 access point
+  # originate inside the VPC (the access point uses a VPC network origin, which
+  # denies any request that does not arrive through a VPC endpoint in this VPC).
+  # Gateway endpoints are free and also keep S3 traffic off the NAT Gateway.
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+        - !Ref PrivateRouteTable2
+
+  # ============================================================
+  # Security Group (includes AD ports)
+  # ============================================================
+  FSxNSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for FSxN PoC with AD - allows NFS, SMB, iSCSI, ONTAP management, SnapMirror, and AD ports
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: !Ref VpcCidr
+          Description: NFS
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: !Ref VpcCidr
+          Description: SMB
+        - IpProtocol: tcp
+          FromPort: 3260
+          ToPort: 3260
+          CidrIp: !Ref VpcCidr
+          Description: iSCSI
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCidr
+          Description: ONTAP REST API / management
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref VpcCidr
+          Description: ONTAP SSH management
+        - IpProtocol: tcp
+          FromPort: 111
+          ToPort: 111
+          CidrIp: !Ref VpcCidr
+          Description: NFS portmapper
+        - IpProtocol: tcp
+          FromPort: 635
+          ToPort: 635
+          CidrIp: !Ref VpcCidr
+          Description: NFS mountd
+        - IpProtocol: tcp
+          FromPort: 4046
+          ToPort: 4046
+          CidrIp: !Ref VpcCidr
+          Description: NFS lockd
+        - IpProtocol: tcp
+          FromPort: 11104
+          ToPort: 11105
+          CidrIp: !Ref VpcCidr
+          Description: SnapMirror intercluster
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !Ref VpcCidr
+          Description: AD DNS (TCP)
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !Ref VpcCidr
+          Description: AD DNS (UDP)
+        - IpProtocol: tcp
+          FromPort: 88
+          ToPort: 88
+          CidrIp: !Ref VpcCidr
+          Description: AD Kerberos (TCP)
+        - IpProtocol: udp
+          FromPort: 88
+          ToPort: 88
+          CidrIp: !Ref VpcCidr
+          Description: AD Kerberos (UDP)
+        - IpProtocol: tcp
+          FromPort: 389
+          ToPort: 389
+          CidrIp: !Ref VpcCidr
+          Description: AD LDAP
+        - IpProtocol: tcp
+          FromPort: 636
+          ToPort: 636
+          CidrIp: !Ref VpcCidr
+          Description: AD LDAPS
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FSxN-SG'
+
+  # ============================================================
+  # IAM Role for Session Manager
+  # ============================================================
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonFSxReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSSMDirectoryServiceAccess
+      Policies:
+        # Scoped to the single S3 access point created by this stack, so the
+        # instance can exercise S3 API access to vol1 and nothing else in S3.
+        - PolicyName: FSxNS3AccessPointAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:s3:${AWS::Region}:${AWS::AccountId}:accesspoint/fsxn-poc-${Volume1}'
+                  - !Sub 'arn:${AWS::Partition}:s3:${AWS::Region}:${AWS::AccountId}:accesspoint/fsxn-poc-${Volume1}/object/*'
+        # Lets the instance read this stack's outputs to discover the access
+        # point alias and ARN, so the S3 validation steps need no hardcoding.
+        - PolicyName: DescribeOwnStack
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Ref AWS::StackId
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EC2-Role'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # ============================================================
+  # AWS Managed Microsoft AD
+  # ============================================================
+  ManagedAD:
+    Type: AWS::DirectoryService::MicrosoftAD
+    Properties:
+      Name: !Ref ADDomainName
+      Edition: Standard
+      Password: !Ref ADAdminPassword
+      VpcSettings:
+        VpcId: !Ref VPC
+        SubnetIds:
+          - !Ref PrivateSubnet
+          - !Ref PrivateSubnet2
+
+  # DHCP Options Set for AD DNS resolution
+  ADDhcpOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: !Ref ADDomainName
+      DomainNameServers: !GetAtt ManagedAD.DnsIpAddresses
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AD-DHCP'
+
+  ADDhcpOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VPC
+      DhcpOptionsId: !Ref ADDhcpOptions
+
+  # ============================================================
+  # FSx for NetApp ONTAP File System
+  # ============================================================
+  FSxNFileSystem:
+    Type: AWS::FSx::FileSystem
+    DependsOn: ADDhcpOptionsAssociation
+    Properties:
+      FileSystemType: ONTAP
+      StorageCapacity: !If [IsPerformance, 2048, 1024]
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref FSxNSecurityGroup
+      OntapConfiguration:
+        DeploymentType: SINGLE_AZ_2
+        ThroughputCapacity: !If [IsPerformance, 3072, 384]
+        FsxAdminPassword: !Ref FsxAdminPassword
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FSxN'
+
+  # ============================================================
+  # SVM with Active Directory (NFS + SMB)
+  # ============================================================
+  SVM:
+    Type: AWS::FSx::StorageVirtualMachine
+    Properties:
+      FileSystemId: !Ref FSxNFileSystem
+      Name: svm1
+      SvmAdminPassword: !Ref SvmAdminPassword
+      ActiveDirectoryConfiguration:
+        NetBiosName: SVM1
+        SelfManagedActiveDirectoryConfiguration:
+          DomainName: !Ref ADDomainName
+          OrganizationalUnitDistinguishedName: !Ref ADOrganizationalUnit
+          UserName: Admin
+          Password: !Ref ADAdminPassword
+          DnsIps: !GetAtt ManagedAD.DnsIpAddresses
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SVM'
+
+  Volume1:
+    Type: AWS::FSx::Volume
+    Properties:
+      Name: vol1
+      VolumeType: ONTAP
+      OntapConfiguration:
+        JunctionPath: /vol1
+        SizeInMegabytes: 102400
+        StorageVirtualMachineId: !Ref SVM
+        StorageEfficiencyEnabled: true
+        TieringPolicy:
+          Name: AUTO
+          CoolingPeriod: 2
+        SecurityStyle: NTFS
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vol1'
+
+  Volume2:
+    Type: AWS::FSx::Volume
+    Properties:
+      Name: vol2
+      VolumeType: ONTAP
+      OntapConfiguration:
+        JunctionPath: /vol2
+        SizeInMegabytes: 102400
+        StorageVirtualMachineId: !Ref SVM
+        StorageEfficiencyEnabled: true
+        TieringPolicy:
+          Name: SNAPSHOT_ONLY
+        SecurityStyle: NTFS
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vol2'
+
+  Volume3:
+    Type: AWS::FSx::Volume
+    Properties:
+      Name: vol3
+      VolumeType: ONTAP
+      OntapConfiguration:
+        JunctionPath: /vol3
+        SizeInMegabytes: 102400
+        StorageVirtualMachineId: !Ref SVM
+        StorageEfficiencyEnabled: true
+        TieringPolicy:
+          Name: NONE
+        SecurityStyle: NTFS
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vol3'
+
+  # ============================================================
+  # S3 Access Point (attached to vol1)
+  # ============================================================
+  # Exposes vol1 through the S3 API so the same data is reachable over NFS and
+  # over S3 with no copy. Requires the file system to run ONTAP 9.17.1 or later
+  # and the Region to support S3 access points for FSx for ONTAP.
+  #
+  # Two authorization layers apply to every request:
+  #   1. AWS  — the access point policy, the caller's IAM identity policy, and
+  #             the VPC network origin (enforced before any policy evaluation).
+  #   2. ONTAP — the FileSystemIdentity below; that user's permissions on the
+  #             volume decide what the request can actually read or write.
+  #
+  # The volumes in this template use NTFS security style, so the access point
+  # maps to a Windows identity — the AWS Managed Microsoft AD administrator,
+  # which has full access to the volume. For production, create a dedicated AD
+  # user or service account with least-privilege NTFS permissions and use it
+  # here instead.
+  Vol1S3AccessPoint:
+    Type: AWS::FSx::S3AccessPointAttachment
+    Properties:
+      # Derived from the volume ID: access point names must be unique per
+      # account and Region, and lowercase (stack names may be mixed case).
+      Name: !Sub 'fsxn-poc-${Volume1}'
+      Type: ONTAP
+      OntapConfiguration:
+        VolumeId: !Ref Volume1
+        FileSystemIdentity:
+          Type: WINDOWS
+          WindowsUser:
+            # AWS Managed Microsoft AD administrator, qualified with the NetBIOS
+            # domain name (the first label of the FQDN) so that ONTAP can
+            # resolve it against the domain the SVM is joined to.
+            Name: !Join ['\', [!Select [0, !Split ['.', !Ref ADDomainName]], 'Admin']]
+      S3AccessPoint:
+        # VPC network origin: S3 denies any request that does not arrive through
+        # a VPC endpoint in this VPC, and the origin cannot be changed later.
+        VpcConfiguration:
+          VpcId: !Ref VPC
+        Policy:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: !GetAtt EC2InstanceRole.Arn
+              Action:
+                - s3:ListBucket
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:s3:${AWS::Region}:${AWS::AccountId}:accesspoint/fsxn-poc-${Volume1}'
+                - !Sub 'arn:${AWS::Partition}:s3:${AWS::Region}:${AWS::AccountId}:accesspoint/fsxn-poc-${Volume1}/object/*'
+
+  # ============================================================
+  # EC2 Instance (Linux client)
+  # ============================================================
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - Volume1
+      - Volume2
+      - Volume3
+    Properties:
+      InstanceType: !If [IsPerformance, c6in.8xlarge, t3.medium]
+      ImageId: !Ref LinuxAmiId
+      SubnetId: !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref FSxNSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum install -y nfs-utils iscsi-initiator-utils fio bind-utils
+
+          # Create mount points
+          mkdir -p /mnt/fsxn/vol1 /mnt/fsxn/vol2 /mnt/fsxn/vol3
+
+          # Discover SVM NFS endpoint using AWS CLI (matching OpenZFS PoC guide pattern)
+          SVM_DNS=$(aws fsx describe-storage-virtual-machines \
+            --storage-virtual-machine-ids ${SVM} \
+            --query 'StorageVirtualMachines[0].Endpoints.Nfs.DNSName' \
+            --output text --region ${AWS::Region})
+
+          # Wait for SVM DNS to resolve
+          until host $SVM_DNS &>/dev/null; do
+            echo "Waiting for SVM DNS to resolve..."
+            sleep 30
+          done
+
+          # Mount NFS volumes with recommended options
+          MOUNT_OPTS="nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2"
+          mount -t nfs -o $MOUNT_OPTS $SVM_DNS:/vol1 /mnt/fsxn/vol1
+          mount -t nfs -o $MOUNT_OPTS $SVM_DNS:/vol2 /mnt/fsxn/vol2
+          mount -t nfs -o $MOUNT_OPTS $SVM_DNS:/vol3 /mnt/fsxn/vol3
+
+          # Persist mounts in fstab
+          echo "$SVM_DNS:/vol1 /mnt/fsxn/vol1 nfs $MOUNT_OPTS 0 0" >> /etc/fstab
+          echo "$SVM_DNS:/vol2 /mnt/fsxn/vol2 nfs $MOUNT_OPTS 0 0" >> /etc/fstab
+          echo "$SVM_DNS:/vol3 /mnt/fsxn/vol3 nfs $MOUNT_OPTS 0 0" >> /etc/fstab
+
+          # Save SVM endpoint for convenience
+          echo "SVM_DNS=$SVM_DNS" >> /etc/profile.d/fsxn-poc.sh
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EC2-Linux-Client'
+
+  # ============================================================
+  # EC2 Instance (Windows client) — auto-joined to Managed AD
+  # ============================================================
+  WindowsEC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - ManagedAD
+      - ADDhcpOptionsAssociation
+      - WindowsDomainJoinAssociation
+    Properties:
+      InstanceType: t3.medium
+      ImageId: !Ref WindowsAmiId
+      SubnetId: !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref FSxNSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EC2-Windows-Client'
+
+  # Associate the Windows EC2 instance with Managed AD via SSM State Manager
+  # This automatically domain-joins the instance on first boot.
+  WindowsDomainJoinAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: AWS-JoinDirectoryServiceDomain
+      Targets:
+        - Key: tag:Name
+          Values:
+            - !Sub '${AWS::StackName}-EC2-Windows-Client'
+      Parameters:
+        directoryId:
+          - !Ref ManagedAD
+        directoryName:
+          - !Ref ADDomainName
+        dnsIpAddresses: !GetAtt ManagedAD.DnsIpAddresses
+
+# ============================================================
+# Outputs
+# ============================================================
+Outputs:
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+
+  PublicSubnetId:
+    Description: Public Subnet ID
+    Value: !Ref PublicSubnet
+
+  PrivateSubnetId:
+    Description: Private Subnet 1 ID
+    Value: !Ref PrivateSubnet
+
+  PrivateSubnet2Id:
+    Description: Private Subnet 2 ID
+    Value: !Ref PrivateSubnet2
+
+  SecurityGroupId:
+    Description: Security Group ID
+    Value: !Ref FSxNSecurityGroup
+
+  EC2InstanceId:
+    Description: Linux EC2 Instance ID — connect via Session Manager
+    Value: !Ref EC2Instance
+
+  WindowsEC2InstanceId:
+    Description: >-
+      Windows EC2 Instance ID (auto-joined to Active Directory) — retrieve the
+      Administrator password via 'aws ec2 get-password-data --instance-id <id>
+      --priv-launch-key <key>', then RDP via Session Manager port forwarding.
+    Value: !Ref WindowsEC2Instance
+
+  FSxNFileSystemId:
+    Description: FSx for NetApp ONTAP File System ID
+    Value: !Ref FSxNFileSystem
+
+  SVMId:
+    Description: Storage Virtual Machine (SVM) ID — use 'aws fsx describe-storage-virtual-machines' to get endpoints
+    Value: !Ref SVM
+
+  Volume1Id:
+    Description: Volume 1 ID (tiering AUTO)
+    Value: !Ref Volume1
+
+  Volume2Id:
+    Description: Volume 2 ID (tiering SNAPSHOT_ONLY)
+    Value: !Ref Volume2
+
+  Volume3Id:
+    Description: Volume 3 ID (tiering NONE)
+    Value: !Ref Volume3
+
+  S3AccessPointName:
+    Description: Name of the S3 access point attached to vol1
+    Value: !Sub 'fsxn-poc-${Volume1}'
+
+  S3AccessPointArn:
+    Description: ARN of the S3 access point attached to vol1 — use with the S3 API and in IAM policies
+    Value: !GetAtt Vol1S3AccessPoint.S3AccessPoint.ResourceARN
+
+  S3AccessPointAlias:
+    Description: >-
+      Alias of the S3 access point attached to vol1 — use in place of a bucket
+      name, e.g. 'aws s3 ls s3://<alias>/'. Requests must come from inside the
+      VPC (the deployed EC2 instance), not from CloudShell or a workstation.
+    Value: !GetAtt Vol1S3AccessPoint.S3AccessPoint.Alias
+
+  ADDirectoryId:
+    Description: AWS Managed Microsoft AD Directory ID
+    Value: !Ref ManagedAD
+
+  ADDnsIps:
+    Description: AD DNS IP Addresses
+    Value: !Join
+      - ', '
+      - !GetAtt ManagedAD.DnsIpAddresses

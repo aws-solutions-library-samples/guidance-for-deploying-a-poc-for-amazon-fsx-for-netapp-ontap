@@ -1,0 +1,111 @@
+<mxfile host="app.diagrams.net" modified="2026-06-15" agent="Claude" type="device">
+  <diagram name="Architecture" id="arch-main">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <!-- AWS Cloud boundary -->
+        <mxCell id="aws-cloud" value="AWS Cloud" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;strokeColor=#232F3E;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;spacingTop=5;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="240" y="40" width="1300" height="820" as="geometry" />
+        </mxCell>
+        <!-- VPC boundary -->
+        <mxCell id="vpc" value="VPC (10.0.0.0/16)" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc2;strokeColor=#8C4FFF;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;spacingTop=5;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="520" y="160" width="980" height="670" as="geometry" />
+        </mxCell>
+        <!-- Public Subnet -->
+        <mxCell id="public-subnet" value="Public Subnet (10.0.1.0/24)" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#7AA116;fillColor=#F2F6E8;verticalAlign=top;align=left;spacingLeft=30;spacingTop=5;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="560" y="200" width="400" height="200" as="geometry" />
+        </mxCell>
+        <!-- Private Subnet -->
+        <mxCell id="private-subnet" value="Private Subnet (10.0.2.0/24)" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fontStyle=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#147EBA;fillColor=#E6F2F8;verticalAlign=top;align=left;spacingLeft=30;spacingTop=5;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="560" y="440" width="900" height="360" as="geometry" />
+        </mxCell>
+        <!-- User -->
+        <mxCell id="user" value="&lt;b&gt;1.&lt;/b&gt; User" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3E;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.user;" vertex="1" parent="1">
+          <mxGeometry x="80" y="310" width="60" height="60" as="geometry" />
+        </mxCell>
+        <!-- CloudFormation -->
+        <mxCell id="cfn" value="&lt;b&gt;2.&lt;/b&gt; AWS&lt;br&gt;CloudFormation" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudformation;" vertex="1" parent="1">
+          <mxGeometry x="300" y="80" width="60" height="60" as="geometry" />
+        </mxCell>
+        <!-- Internet Gateway -->
+        <mxCell id="igw" value="Internet&lt;br&gt;Gateway" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.internet_gateway;" vertex="1" parent="1">
+          <mxGeometry x="530" y="80" width="50" height="50" as="geometry" />
+        </mxCell>
+        <!-- NAT Gateway -->
+        <mxCell id="nat" value="&lt;b&gt;3.&lt;/b&gt; NAT&lt;br&gt;Gateway" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.nat_gateway;" vertex="1" parent="1">
+          <mxGeometry x="700" y="260" width="50" height="50" as="geometry" />
+        </mxCell>
+        <!-- Systems Manager -->
+        <mxCell id="ssm" value="&lt;b&gt;4.&lt;/b&gt; AWS Systems&lt;br&gt;Manager&lt;br&gt;Session Manager" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;" vertex="1" parent="1">
+          <mxGeometry x="300" y="310" width="60" height="60" as="geometry" />
+        </mxCell>
+        <!-- EC2 Instance -->
+        <mxCell id="ec2" value="&lt;b&gt;5.&lt;/b&gt; Amazon EC2&lt;br&gt;(Amazon Linux 2023)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" vertex="1" parent="1">
+          <mxGeometry x="680" y="560" width="60" height="60" as="geometry" />
+        </mxCell>
+        <!-- FSxN File System -->
+        <mxCell id="fsxn" value="&lt;b&gt;6.&lt;/b&gt; Amazon FSx for&lt;br&gt;NetApp ONTAP" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7AA116;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fsx;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="490" width="60" height="60" as="geometry" />
+        </mxCell>
+        <!-- SVM box -->
+        <mxCell id="svm-box" value="SVM: svm1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;dashed=1;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="990" y="570" width="200" height="200" as="geometry" />
+        </mxCell>
+        <!-- Volume 1 -->
+        <mxCell id="vol1" value="vol1&lt;br&gt;(AUTO)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7AA116;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=9;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fsx;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="620" width="40" height="40" as="geometry" />
+        </mxCell>
+        <!-- Volume 2 -->
+        <mxCell id="vol2" value="vol2&lt;br&gt;(SNAPSHOT_ONLY)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7AA116;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=9;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fsx;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="620" width="40" height="40" as="geometry" />
+        </mxCell>
+        <!-- Volume 3 -->
+        <mxCell id="vol3" value="vol3&lt;br&gt;(NONE)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7AA116;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=9;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fsx;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="620" width="40" height="40" as="geometry" />
+        </mxCell>
+        <!-- Mount points label -->
+        <mxCell id="mounts-label" value="/mnt/fsxn/vol1, vol2, vol3" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="810" y="630" width="140" height="20" as="geometry" />
+        </mxCell>
+        <!-- Arrows -->
+        <!-- User -> CloudFormation -->
+        <mxCell id="link1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#232F3E;strokeWidth=2;" edge="1" source="user" target="cfn" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link1-label" value="Deploy stack" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#666666;" vertex="1" connectable="0" parent="link1">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
+        </mxCell>
+        <!-- CloudFormation -> VPC -->
+        <mxCell id="link2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;entryX=0.5;entryY=0;strokeColor=#232F3E;strokeWidth=1;dashed=1;" edge="1" source="cfn" target="vpc" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link2-label" value="Creates" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#666666;" vertex="1" connectable="0" parent="link2">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
+        </mxCell>
+        <!-- User -> SSM -->
+        <mxCell id="link3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#232F3E;strokeWidth=2;" edge="1" source="user" target="ssm" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link3-label" value="Connect" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#666666;" vertex="1" connectable="0" parent="link3">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
+        </mxCell>
+        <!-- SSM -> EC2 (via NAT) -->
+        <mxCell id="link4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#232F3E;strokeWidth=2;" edge="1" source="ssm" target="ec2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- EC2 -> FSxN (NFS) -->
+        <mxCell id="link5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#7AA116;strokeWidth=2;" edge="1" source="ec2" target="fsxn" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link5-label" value="NFS v4.1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#7AA116;" vertex="1" connectable="0" parent="link5">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
+        </mxCell>
+        <!-- NAT -> IGW -->
+        <mxCell id="link6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=0;entryX=0.5;entryY=1;strokeColor=#8C4FFF;strokeWidth=1;" edge="1" source="nat" target="igw" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
